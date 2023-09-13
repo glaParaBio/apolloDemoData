@@ -1,6 +1,6 @@
 /output/
 .snakemake
-.swp
-.swo
-.tmp
+*.swp
+*.swo
+*.tmp
 nohup.out

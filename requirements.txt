@@ -1,4 +1,6 @@
-snakemake
-samtools
-hisat2
-deeptools
+snakemake =7.32.3
+samtools =1.17
+hisat2 =2.2.1
+deeptools =3.5.3
+bedtools =2.31.0
+blast

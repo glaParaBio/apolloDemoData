@@ -1,3 +1,5 @@
-genome	fasta	gff	max_intron_len
-Plasmodium_falciparum	https://plasmodb.org/common/downloads/release-64/Pfalciparum3D7/fasta/data/PlasmoDB-64_Pfalciparum3D7_Genome.fasta	https://plasmodb.org/common/downloads/release-64/Pfalciparum3D7/gff/data/PlasmoDB-64_Pfalciparum3D7.gff	5000
-Plasmodium_chabaudi_chabaudi	https://plasmodb.org/common/downloads/release-64/Pchabaudichabaudi/fasta/data/PlasmoDB-64_Pchabaudichabaudi_Genome.fasta	https://plasmodb.org/common/downloads/release-64/Pchabaudichabaudi/gff/data/PlasmoDB-64_Pchabaudichabaudi.gff	5000
+# demo_contigs: Comma separated list of contigs (regions) to keep for demo data
+#
+genome	fasta	gff	max_intron_len	demo_contigs
+Pfalciparum3D7	https://plasmodb.org/common/downloads/release-64/Pfalciparum3D7/fasta/data/PlasmoDB-64_Pfalciparum3D7_Genome.fasta	https://plasmodb.org/common/downloads/release-64/Pfalciparum3D7/gff/data/PlasmoDB-64_Pfalciparum3D7.gff	5000	Pf3D7_06_v3
+Pchabaudichabaudi	https://plasmodb.org/common/downloads/release-64/Pchabaudichabaudi/fasta/data/PlasmoDB-64_Pchabaudichabaudi_Genome.fasta	https://plasmodb.org/common/downloads/release-64/Pchabaudichabaudi/gff/data/PlasmoDB-64_Pchabaudichabaudi.gff	5000	PCHAS_01_v3
