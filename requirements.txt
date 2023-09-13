@@ -1,0 +1,4 @@
+snakemake
+samtools
+hisat2
+deeptools

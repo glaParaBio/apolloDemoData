@@ -1,0 +1,6 @@
+/output/
+.snakemake
+.swp
+.swo
+.tmp
+nohup.out

@@ -1,0 +1,3 @@
+genome	fasta	gff	max_intron_len
+Plasmodium_falciparum	https://plasmodb.org/common/downloads/release-64/Pfalciparum3D7/fasta/data/PlasmoDB-64_Pfalciparum3D7_Genome.fasta	https://plasmodb.org/common/downloads/release-64/Pfalciparum3D7/gff/data/PlasmoDB-64_Pfalciparum3D7.gff	5000
+Plasmodium_chabaudi_chabaudi	https://plasmodb.org/common/downloads/release-64/Pchabaudichabaudi/fasta/data/PlasmoDB-64_Pchabaudichabaudi_Genome.fasta	https://plasmodb.org/common/downloads/release-64/Pchabaudichabaudi/gff/data/PlasmoDB-64_Pchabaudichabaudi.gff	5000
