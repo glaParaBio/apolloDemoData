@@ -1,4 +1,7 @@
 import pandas
+import glob
+
+os.makedirs('slurm', exist_ok=True)
 
 genomes = pandas.read_csv(config['genomes'], sep='\t', comment='#')
 ss = pandas.read_csv(config['ss'], sep='\t', comment='#')
@@ -10,7 +13,6 @@ wildcard_constraints:
     library_id='|'.join([re.escape(x) for x in ss.library_id]),
     genome='|'.join([re.escape(x) for x in ss.genome]),
     r='|'.join([re.escape(x) for x in ['1', '2']]),
-
 
 rule all:
     input:
@@ -168,7 +170,7 @@ checkpoint split_query:
     shell:
         r"""
         mkdir {output.outdir}
-        grep -w -P '{params.ctg}' {input.fai} | bedtools makewindows -g - -w 20000 | awk '{{print $1 ":" $2+1 "-" $3}}' > {output.outdir}/windows.bed
+        grep -w -P '{params.ctg}' {input.fai} | bedtools makewindows -g - -w 100000 | awk '{{print $1 ":" $2+1 "-" $3}}' > {output.outdir}/windows.bed
         while read -r line
         do
            samtools faidx {input.fa} $line > split/${{line}}.fasta
@@ -191,18 +193,21 @@ rule tblastx:
            -evalue 0.1 \
            -max_target_seqs 10 \
            -outfmt 6 > {output.out} 
+        rm {input.query}
         """
 
 
 def aggregate_blast(wc):
-    checkpoint_output = checkpoints.split_query.get(**wc).output[0]
-    return expand('blast/{window}.out', window=glob_wildcards(os.path.join(checkpoint_output, "{window}.fasta")).window)
+    checkpoint_output = checkpoints.split_query.get().output.outdir
+    outfiles = [os.path.basename(x) for x in glob.glob(os.path.join(checkpoint_output, '*.fasta'))]
+    windows = [re.sub('\.fasta$', '', x) for x in outfiles]
+    return expand('blast/{window}.out', window=windows)
 
 rule cat_blast:
     input:
         out=aggregate_blast,
     output:
-        out='crunch/blast.out',
+        out='crunch/blast.out.gz',
     run:
         fout = open(output.out + '.tmp', 'w')
         for xin in input.out:
@@ -222,4 +227,4 @@ rule cat_blast:
                     line[7] = str(int(line[7])  + offset)
                     fout.write('\t'.join(line) + '\n')
         fout.close()
-        shell('sort -k1,1 -k7,7n -k9,9n {output.out}.tmp > {output.out} && rm {output.out}.tmp')
+        shell('sort -k1,1 -k7,7n -k9,9n {output.out}.tmp | gzip > {output.out} && rm {output.out}.tmp')

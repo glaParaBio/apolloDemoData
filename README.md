@@ -7,7 +7,9 @@
 
 # Description
 
-The code here prepares demo data for showcasing [Apollo](https://github.com/GMOD/Apollo3).
+The code here prepares demo data for showcasing
+[Apollo](https://github.com/GMOD/Apollo3). You can download the processed data
+from [releases](https://github.com/glaParaBio/apolloDemoData/releases).
 
 At present there is part of the samples from [Subudhi AK et al.,
 2020](https://pubmed.ncbi.nlm.nih.gov/32488076/) for *P falciparum* and *P.
@@ -18,6 +20,7 @@ chabaudi*.
 Install dependencies:
 
 ```
+mamba create --yes -n apolloDemoData
 mamba install -n apolloDemoData --yes --file requirements.txt
 ```
 
@@ -25,7 +28,8 @@ Run the analysis. Remove `-n` (dry-run) for actual execution and remove the `clu
 local execution.
 
 ```
-mkdir -p output/slurm
+mamba activate apolloDemoData
+
 snakemake -p -n -j 10 -C ss=$PWD/sample_sheet.tsv genomes=$PWD/genomes.tsv \
     --latency-wait 60 \
     --cluster 'sbatch --cpus-per-task=10 --mem=10G --parsable -o slurm/{rule}.{jobid}.out -e slurm/{rule}.{jobid}.err' \
