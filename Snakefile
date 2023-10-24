@@ -19,21 +19,21 @@ rule all:
         expand('demoData/{genome}/hisat2/{library_id}.cram', zip, genome=ss.genome, library_id=ss.library_id),
         expand('demoData/{genome}/hisat2/{library_id}.cram.crai', zip, genome=ss.genome, library_id=ss.library_id),
         expand('demoData/{genome}/bigwig/{library_id}.bw', zip, genome=ss.genome, library_id=ss.library_id),
-        expand('demoData/{genome}/ref/{genome}.fasta.gz', genome=ss.genome),
+        expand('demoData/{genome}/ref/{genome}.fasta', genome=ss.genome),
+        expand('demoData/{genome}/ref/{genome}.fasta.fai', genome=ss.genome),
         expand('demoData/{genome}/ref/{genome}.gff.gz', genome=ss.genome),
+        expand('demoData/{genome}/ref/{genome}.gff.gz.tbi', genome=ss.genome),
 
 
 rule download_genome:
     output:
-        fa='{genome}/ref/{genome}.fasta',
-        fai='{genome}/ref/{genome}.fasta.fai',
-        dd='demoData/{genome}/ref/{genome}.fasta.gz',
+        fa='demoData/{genome}/ref/{genome}.fasta',
+        fai='demoData/{genome}/ref/{genome}.fasta.fai',
     params:
         url=lambda wc: genomes[genomes.genome == wc.genome].fasta.iloc[0],
     shell:
         r"""
         curl -s -L {params.url} > {output.fa}
-        gzip -c {output.fa} > {output.dd}
         samtools faidx {output.fa}
         """
 
@@ -45,15 +45,28 @@ rule download_gff:
         url=lambda wc: genomes[genomes.genome == wc.genome].gff.iloc[0],
     shell:
         r"""
-        curl -s -L {params.url} | gzip > {output.gff}
+        curl -s -L {params.url} \
+        | sortBed -header \
+        | bgzip > {output.gff}
+        """
+
+
+rule index_gff:
+    input:
+        gff='demoData/{genome}/ref/{genome}.gff.gz',
+    output:
+        tbi='demoData/{genome}/ref/{genome}.gff.gz.tbi',
+    shell:
+        r"""
+        tabix -p gff {input.gff}
         """
 
 
 rule hisat_index:
     input:
-        fa= '{genome}/ref/{genome}.fasta',
+        fa= 'demoData/{genome}/ref/{genome}.fasta',
     output:
-        idx= '{genome}/ref/{genome}.8.ht2',
+        idx= 'demoData/{genome}/ref/{genome}.8.ht2',
     run:
         idx = re.sub('\.8\.ht2$', '', output.idx)
 
@@ -94,7 +107,7 @@ def get_fastq_for_library_id(ss, library_id):
 rule hisat2:
     input:
         fq=lambda wc: get_fastq_for_library_id(ss, wc.library_id),
-        idx='{genome}/ref/{genome}.8.ht2',
+        idx='demoData/{genome}/ref/{genome}.8.ht2',
     output:
         bam='{genome}/hisat2/{library_id}.bam',
         bai='{genome}/hisat2/{library_id}.bam.bai',
@@ -116,16 +129,25 @@ rule hisat2:
 rule cram_for_demo:
     input:
         bam='{genome}/hisat2/{library_id}.bam',
-        genome='{genome}/ref/{genome}.fasta',
+        genome='demoData/{genome}/ref/{genome}.fasta',
     output:
         cram='demoData/{genome}/hisat2/{library_id}.cram',
-        crai='demoData/{genome}/hisat2/{library_id}.cram.crai',
     params:
         ctg=lambda wc: genomes[genomes.genome== wc.genome].demo_contigs.iloc[0].replace(',', ' '),
     shell:
         r"""
         samtools view -C -T {input.genome} {input.bam} {params.ctg} > {output.cram}
-        samtools index {output.cram}
+        """
+
+
+rule index_cram:
+    input:
+        cram='demoData/{genome}/hisat2/{library_id}.cram',
+    output:
+        crai='demoData/{genome}/hisat2/{library_id}.cram.crai',
+    shell:
+        r"""
+        samtools index {input.cram}
         """
 
 
