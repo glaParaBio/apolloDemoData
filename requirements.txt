@@ -3,4 +3,5 @@ samtools =1.17
 hisat2 =2.2.1
 deeptools =3.5.3
 bedtools =2.31.0
-blast
+blast =2.14.1
+minimap2 =2.26

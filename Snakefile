@@ -7,6 +7,8 @@ genomes = pandas.read_csv(config['genomes'], sep='\t', comment='#')
 ss = pandas.read_csv(config['ss'], sep='\t', comment='#')
 ss = ss[ss.use == 'yes']
 
+BLAST_FMT = 'qaccver saccver pident length mismatch gapopen qstart qend sstart send evalue bitscore'
+
 assert len(ss.library_id) == len(set(ss.library_id))
 
 wildcard_constraints:
@@ -16,6 +18,11 @@ wildcard_constraints:
 
 rule all:
     input:
+        'apolloDemoData.zip',
+
+
+rule zip_demodata:
+    input:
         expand('demoData/{genome}/hisat2/{library_id}.cram', zip, genome=ss.genome, library_id=ss.library_id),
         expand('demoData/{genome}/hisat2/{library_id}.cram.crai', zip, genome=ss.genome, library_id=ss.library_id),
         expand('demoData/{genome}/bigwig/{library_id}.bw', zip, genome=ss.genome, library_id=ss.library_id),
@@ -23,6 +30,12 @@ rule all:
         expand('demoData/{genome}/ref/{genome}.fasta.fai', genome=ss.genome),
         expand('demoData/{genome}/ref/{genome}.gff.gz', genome=ss.genome),
         expand('demoData/{genome}/ref/{genome}.gff.gz.tbi', genome=ss.genome),
+    output:
+        zip='apolloDemoData.zip',
+    shell:
+        r"""
+        zip -r {output.zip} {input}
+        """
 
 
 rule download_genome:
@@ -208,13 +221,15 @@ rule tblastx:
         fa='blast/db/ref.fasta',
     output:
         out='blast/{window}.out',
+    params:
+        fmt=BLAST_FMT,
     shell:
         r"""
         tblastx -query {input.query} \
            -db {input.fa} \
            -evalue 0.1 \
            -max_target_seqs 10 \
-           -outfmt 6 > {output.out} 
+           -outfmt "6 ${params.fmt}" > {output.out} 
         rm {input.query}
         """
 
@@ -231,6 +246,7 @@ rule cat_blast:
     output:
         out='crunch/blast.out.gz',
     run:
+        import gzip 
         fout = open(output.out + '.tmp', 'w')
         for xin in input.out:
             with open(xin) as fin:
@@ -249,4 +265,39 @@ rule cat_blast:
                     line[7] = str(int(line[7])  + offset)
                     fout.write('\t'.join(line) + '\n')
         fout.close()
-        shell('sort -k1,1 -k7,7n -k9,9n {output.out}.tmp | gzip > {output.out} && rm {output.out}.tmp')
+        
+        HEADER = BLAST_FMT.replace(' ', '\t')
+        with gzip.open(output.out, 'wb') as fout:
+            fout.write(f'#{HEADER}\n'.encode())
+
+        shell('sort -k1,1 -k7,7n -k9,9n {output.out}.tmp | gzip >> {output.out} && rm {output.out}.tmp')
+
+
+rule blast_to_paf:
+    input:
+        out='crunch/blast.out.gz',
+        fai=expand('demoData/{genome}/ref/{genome}.fasta.fai', genome=ss.genome),
+    output:
+        out='crunch/blast.paf',
+    run:
+        li = []
+        for fn in input.fai:
+            df = pandas.read_csv(fn, sep='\t', header=None, usecols=[0, 1], names=['contig', 'contig_length'])
+            li.append(df)
+        fai = pandas.concat(li, axis=0, ignore_index=True)
+        assert len(fai.contig) == len(set(fai.contig))
+        
+        out = pandas.read_csv(input.out, sep='\t')
+        
+        paf = pandas.merge(out, fai, left_on='#qaccver', right_on='contig')
+        paf.drop('contig', axis='columns', inplace=True)
+        paf.rename(columns={'contig_length': 'qaccver_length'}, inplace=True)
+
+        paf = pandas.merge(paf, fai, left_on='saccver', right_on='contig')
+        paf.drop('contig', axis='columns', inplace=True)
+        paf.rename(columns={'contig_length': 'saccver_length'}, inplace=True)
+
+        paf['qstart'] = paf['qstart'] - 1
+        paf['sstart'] = paf['sstart'] - 1
+
+        paf[['#qaccver', 'qaccver_length', 'qstart', 'qend', ]]
