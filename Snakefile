@@ -7,7 +7,7 @@ genomes = pandas.read_csv(config['genomes'], sep='\t', comment='#')
 ss = pandas.read_csv(config['ss'], sep='\t', comment='#')
 ss = ss[ss.use == 'yes']
 
-BLAST_FMT = 'qaccver saccver pident length mismatch gapopen qstart qend sstart send evalue bitscore'
+BLAST_FMT = 'qaccver saccver pident length mismatch gapopen qstart qend sstart send evalue bitscore nident positive slen sstrand'
 
 assert len(ss.library_id) == len(set(ss.library_id))
 
@@ -16,34 +16,75 @@ wildcard_constraints:
     genome='|'.join([re.escape(x) for x in ss.genome]),
     r='|'.join([re.escape(x) for x in ['1', '2']]),
 
+localrules: all, download_fastq, download_gff
+
 rule all:
     input:
         'apolloDemoData.zip',
+        'apolloDemoDataFull.zip',
 
 
 rule zip_demodata:
     input:
-        expand('demoData/{genome}/hisat2/{library_id}.cram', zip, genome=ss.genome, library_id=ss.library_id),
-        expand('demoData/{genome}/hisat2/{library_id}.cram.crai', zip, genome=ss.genome, library_id=ss.library_id),
-        expand('demoData/{genome}/bigwig/{library_id}.bw', zip, genome=ss.genome, library_id=ss.library_id),
-        expand('demoData/{genome}/ref/{genome}.fasta', genome=ss.genome),
-        expand('demoData/{genome}/ref/{genome}.fasta.fai', genome=ss.genome),
-        expand('demoData/{genome}/ref/{genome}.gff.gz', genome=ss.genome),
-        expand('demoData/{genome}/ref/{genome}.gff.gz.tbi', genome=ss.genome),
+        expand('{genome}/hisat2/{library_id}.cram', zip, genome=ss.genome, library_id=ss.library_id),
+        expand('{genome}/hisat2/{library_id}.cram.crai', zip, genome=ss.genome, library_id=ss.library_id),
+        expand('{genome}/bigwig/{library_id}.bw', zip, genome=ss.genome, library_id=ss.library_id),
+        expand('{genome}/ref/{genome}.fasta', genome=ss.genome),
+        expand('{genome}/ref/{genome}.fasta.fai', genome=ss.genome),
+        expand('{genome}/ref/{genome}.gff.gz', genome=ss.genome),
+        expand('{genome}/ref/{genome}.gff.gz.tbi', genome=ss.genome),
+        'crunch/blast.paf',
     output:
         zip='apolloDemoData.zip',
+    params:
+        outdir=lambda wc, output: re.sub('\.zip$', '', output.zip)
     shell:
         r"""
-        zip -r {output.zip} {input}
+        rm -rf {params.outdir}
+        mkdir {params.outdir}
+        rsync --relative -arvP {input} {params.outdir}
+        zip -r {output.zip} {params.outdir}
+        rm -r {params.outdir}
+        """
+
+
+rule zip_fulldemodata:
+    input:
+        expand('{genome}/hisat2/{library_id}.cram', zip, genome=ss.genome, library_id=ss.library_id),
+        expand('{genome}/hisat2/{library_id}.cram.crai', zip, genome=ss.genome, library_id=ss.library_id),
+        expand('{genome}/hisat2/{library_id}.bam', zip, genome=ss.genome, library_id=ss.library_id),
+        expand('{genome}/hisat2/{library_id}.bam.bai', zip, genome=ss.genome, library_id=ss.library_id),
+        expand('{genome}/bigwig/{library_id}.bw', zip, genome=ss.genome, library_id=ss.library_id),
+        expand('{genome}/ref/{genome}.fasta', genome=ss.genome),
+        expand('{genome}/ref/{genome}.fasta.fai', genome=ss.genome),
+        expand('{genome}/ref/{genome}.gff.gz', genome=ss.genome),
+        expand('{genome}/ref/{genome}.gff.gz.tbi', genome=ss.genome),
+        'crunch/blast.paf',
+        'crunch/blast.out.gz',
+    output:
+        zip='apolloDemoDataFull.zip',
+    params:
+        outdir=lambda wc, output: re.sub('\.zip$', '', output.zip)
+    resources:
+        mem='2G',
+    shell:
+        r"""
+        rm -rf {params.outdir}
+        mkdir {params.outdir}
+        rsync --relative -arvP {input} {params.outdir}
+        zip -r {output.zip} {params.outdir}
+        rm -r {params.outdir}
         """
 
 
 rule download_genome:
     output:
-        fa='demoData/{genome}/ref/{genome}.fasta',
-        fai='demoData/{genome}/ref/{genome}.fasta.fai',
+        fa='{genome}/ref/{genome}.fasta',
+        fai='{genome}/ref/{genome}.fasta.fai',
     params:
         url=lambda wc: genomes[genomes.genome == wc.genome].fasta.iloc[0],
+    resources:
+        mem='100M',
     shell:
         r"""
         curl -s -L {params.url} > {output.fa}
@@ -53,9 +94,11 @@ rule download_genome:
 
 rule download_gff:
     output:
-        gff='demoData/{genome}/ref/{genome}.gff.gz',
+        gff='{genome}/ref/{genome}.gff.gz',
     params:
         url=lambda wc: genomes[genomes.genome == wc.genome].gff.iloc[0],
+    resources:
+        mem='100M',
     shell:
         r"""
         curl -s -L {params.url} \
@@ -66,9 +109,9 @@ rule download_gff:
 
 rule index_gff:
     input:
-        gff='demoData/{genome}/ref/{genome}.gff.gz',
+        gff='{genome}/ref/{genome}.gff.gz',
     output:
-        tbi='demoData/{genome}/ref/{genome}.gff.gz.tbi',
+        tbi='{genome}/ref/{genome}.gff.gz.tbi',
     shell:
         r"""
         tabix -p gff {input.gff}
@@ -77,9 +120,9 @@ rule index_gff:
 
 rule hisat_index:
     input:
-        fa= 'demoData/{genome}/ref/{genome}.fasta',
+        fa= '{genome}/ref/{genome}.fasta',
     output:
-        idx= 'demoData/{genome}/ref/{genome}.8.ht2',
+        idx= '{genome}/ref/{genome}.8.ht2',
     run:
         idx = re.sub('\.8\.ht2$', '', output.idx)
 
@@ -105,6 +148,8 @@ rule download_fastq:
         fq='ena/{library_id}.{srr_id}_{r}.fastq.gz',
     params:
         ftp=lambda wc: get_fastq_download_url(ss, wc.library_id, wc.r)
+    resources:
+        mem='100M',
     shell:
         r"""
         curl -s -L {params.ftp} > {output.fq}
@@ -120,13 +165,15 @@ def get_fastq_for_library_id(ss, library_id):
 rule hisat2:
     input:
         fq=lambda wc: get_fastq_for_library_id(ss, wc.library_id),
-        idx='demoData/{genome}/ref/{genome}.8.ht2',
+        idx='{genome}/ref/{genome}.8.ht2',
     output:
         bam='{genome}/hisat2/{library_id}.bam',
         bai='{genome}/hisat2/{library_id}.bam.bai',
         hlog='{genome}/hisat2/{library_id}.log',
     params:
         max_intron_len= lambda wc: genomes[genomes.genome == wc.genome].max_intron_len.iloc[0] ,
+    resources:
+        mem='6G',
     shell:
         r"""
         idx=`echo {input.idx} | sed 's/.8.ht2$//'`
@@ -139,25 +186,28 @@ rule hisat2:
         """
 
 
-rule cram_for_demo:
+rule downsample_cram:
     input:
         bam='{genome}/hisat2/{library_id}.bam',
-        genome='demoData/{genome}/ref/{genome}.fasta',
+        genome='{genome}/ref/{genome}.fasta',
     output:
-        cram='demoData/{genome}/hisat2/{library_id}.cram',
-    params:
-        ctg=lambda wc: genomes[genomes.genome== wc.genome].demo_contigs.iloc[0].replace(',', ' '),
+        cram='{genome}/hisat2/{library_id}.cram',
     shell:
         r"""
-        samtools view -C -T {input.genome} {input.bam} {params.ctg} > {output.cram}
+        set +o pipefail
+        tot=`samtools stats -@ 4 {input.bam} | grep '1st fragments:' | cut -f 3`
+        set -o pipefail
+        frac=`echo 2000000 / $tot | bc -l | awk '{{if($1 > 1){{print 1}} else {{print $1}}}}'`
+         
+        samtools view -@ 4 --subsample $frac --subsample-seed 1234 -C -T {input.genome} {input.bam} > {output.cram}
         """
 
 
 rule index_cram:
     input:
-        cram='demoData/{genome}/hisat2/{library_id}.cram',
+        cram='{genome}/hisat2/{library_id}.cram',
     output:
-        crai='demoData/{genome}/hisat2/{library_id}.cram.crai',
+        crai='{genome}/hisat2/{library_id}.cram.crai',
     shell:
         r"""
         samtools index {input.cram}
@@ -168,7 +218,7 @@ rule bamToBigwig:
     input:
         bam='{genome}/hisat2/{library_id}.bam',
     output:
-        bw='demoData/{genome}/bigwig/{library_id}.bw',
+        bw='{genome}/bigwig/{library_id}.bw',
     shell:
         r"""
         bamCoverage -b {input.bam} -o {output} \
@@ -183,14 +233,12 @@ rule makeblastdb:
     input:
         fa='Pfalciparum3D7/ref/Pfalciparum3D7.fasta',
     output:
-        fa='blast/db/ref.fasta',
-        db='blast/db/ref.fasta.nin',
-    params:
-        ctg=lambda wc: genomes[genomes.genome== 'Pfalciparum3D7'].demo_contigs.iloc[0].replace(',', ' '),
+        db='Pfalciparum3D7/ref/Pfalciparum3D7.fasta.nin',
+    #params:
+    #    ctg=lambda wc: genomes[genomes.genome== 'Pfalciparum3D7'].demo_contigs.iloc[0].replace(',', ' '),
     shell:
         r"""
-        samtools faidx {input.fa} {params.ctg} > {output.fa}
-        makeblastdb -in {output.fa} -dbtype nucl
+        makeblastdb -in {input.fa} -dbtype nucl
         """
 
 
@@ -200,12 +248,12 @@ checkpoint split_query:
         fa='Pchabaudichabaudi/ref/Pchabaudichabaudi.fasta',
     output:
         outdir=temp(directory('split')),
-    params:
-        ctg=lambda wc: genomes[genomes.genome== 'Pchabaudichabaudi'].demo_contigs.iloc[0].replace(',', '|'),
+    #params:
+    #    ctg=lambda wc: genomes[genomes.genome== 'Pchabaudichabaudi'].demo_contigs.iloc[0].replace(',', '|'),
     shell:
         r"""
         mkdir {output.outdir}
-        grep -w -P '{params.ctg}' {input.fai} | bedtools makewindows -g - -w 100000 | awk '{{print $1 ":" $2+1 "-" $3}}' > {output.outdir}/windows.bed
+        bedtools makewindows -g {input.fai} -w 20000 | awk '{{print $1 ":" $2+1 "-" $3}}' > {output.outdir}/windows.bed
         while read -r line
         do
            samtools faidx {input.fa} $line > split/${{line}}.fasta
@@ -217,20 +265,22 @@ checkpoint split_query:
 rule tblastx:
     input:
         query='split/{window}.fasta',
-        db='blast/db/ref.fasta.nin',
-        fa='blast/db/ref.fasta',
+        db='Pfalciparum3D7/ref/Pfalciparum3D7.fasta.nin',
+        fa='Pfalciparum3D7/ref/Pfalciparum3D7.fasta',
     output:
         out='blast/{window}.out',
     params:
         fmt=BLAST_FMT,
+    resources:
+        mem='1G',
+        cpus_per_task=1,
     shell:
         r"""
         tblastx -query {input.query} \
            -db {input.fa} \
            -evalue 0.1 \
            -max_target_seqs 10 \
-           -outfmt "6 ${params.fmt}" > {output.out} 
-        rm {input.query}
+           -outfmt "6 {params.fmt}" > {output.out} 
         """
 
 
@@ -245,6 +295,8 @@ rule cat_blast:
         out=aggregate_blast,
     output:
         out='crunch/blast.out.gz',
+    resources:
+        mem='2500M',
     run:
         import gzip 
         fout = open(output.out + '.tmp', 'w')
@@ -270,34 +322,159 @@ rule cat_blast:
         with gzip.open(output.out, 'wb') as fout:
             fout.write(f'#{HEADER}\n'.encode())
 
-        shell('sort -k1,1 -k7,7n -k9,9n {output.out}.tmp | gzip >> {output.out} && rm {output.out}.tmp')
+        shell('LC_ALL=C sort -S 2G --parallel 4 -k1,1 -k7,7n -k9,9n {output.out}.tmp | gzip >> {output.out} && rm {output.out}.tmp')
 
 
 rule blast_to_paf:
     input:
         out='crunch/blast.out.gz',
-        fai=expand('demoData/{genome}/ref/{genome}.fasta.fai', genome=ss.genome),
+        fai=expand('{genome}/ref/{genome}.fasta.fai', genome=ss.genome),
     output:
-        out='crunch/blast.paf',
+        paf='crunch/blast.paf',
+    resources:
+        mem='8G',
     run:
-        li = []
+        fai = {}
         for fn in input.fai:
-            df = pandas.read_csv(fn, sep='\t', header=None, usecols=[0, 1], names=['contig', 'contig_length'])
-            li.append(df)
-        fai = pandas.concat(li, axis=0, ignore_index=True)
-        assert len(fai.contig) == len(set(fai.contig))
+            with open(fn) as fin:
+                for line in fin:
+                    line = line.strip().split('\t')
+                    assert line[0] not in fai
+                    fai[line[0]] = line[1]
         
         out = pandas.read_csv(input.out, sep='\t')
-        
-        paf = pandas.merge(out, fai, left_on='#qaccver', right_on='contig')
-        paf.drop('contig', axis='columns', inplace=True)
-        paf.rename(columns={'contig_length': 'qaccver_length'}, inplace=True)
+        out = out[(out.pident >= 50) & (out.evalue < 0.01) & (out.length >= 20)]
+        out.rename(columns={'#qaccver': 'qaccver'}, inplace=True) 
 
-        paf = pandas.merge(paf, fai, left_on='saccver', right_on='contig')
-        paf.drop('contig', axis='columns', inplace=True)
-        paf.rename(columns={'contig_length': 'saccver_length'}, inplace=True)
+        qstart = []
+        qend = []
+        sstart = []
+        send = []
+        qaccver_length = []
+        saccver_length = []
+        strand = []
+        for row in out.itertuples():
+            qaccver_length.append(fai[row.qaccver])
+            saccver_length.append(fai[row.saccver])
+            if ((row.qstart < row.qend) and (row.sstart < row.send)) or ((row.qstart > row.qend) and (row.sstart > row.send)):
+                strand.append('+')
+            else:
+                strand.append('-')
 
-        paf['qstart'] = paf['qstart'] - 1
-        paf['sstart'] = paf['sstart'] - 1
+            if row.qstart < row.qend:
+                qstart.append(row.qstart)
+                qend.append(row.qend)
+            else:
+                qstart.append(row.qend)
+                qend.append(row.qstart)
+            if row.sstart < row.send:
+                sstart.append(row.sstart)
+                send.append(row.send)
+            else:
+                sstart.append(row.send)
+                send.append(row.sstart)
+        out['qstart'] = [x - 1 for x in qstart]
+        out['sstart'] = [x - 1 for x in sstart]
+        out['qend'] = qend
+        out['send'] = send
+        out['qaccver_length'] = qaccver_length
+        out['saccver_length'] = saccver_length
+        out['strand'] = strand
+        out['aln_length'] = out['qend'] - out['qstart']
+        out['mapq'] = 255
 
-        paf[['#qaccver', 'qaccver_length', 'qstart', 'qend', ]]
+        out.rename(columns={'qaccver': '#qaccver'}, inplace=True)
+        out[['#qaccver', 'qaccver_length', 'qstart', 'qend', 'strand', 'saccver', 'saccver_length', 'sstart', 'send', 'nident', 'aln_length', 'mapq']].to_csv(output.paf, sep='\t', index=False)
+
+
+# rule download_proteins:
+#     output:
+#         faa='{genome}/ref/{genome}_AnnotatedProteins.fasta'
+#     params:
+#         url=lambda wc: genomes[genomes.genome == wc.genome].annotated_proteins.iloc[0],
+#     resources:
+#         mem='100M',
+#     shell:
+#         r"""
+#         curl -s -L {params.url} > {output.faa}
+#         """
+# 
+# 
+# rule protein_coordinates:
+#     input:
+#         faa='{genome}/ref/{genome}_AnnotatedProteins.fasta'
+#     output:
+#         tsv='{genome}/ref/{genome}.proteinLocation.tsv',
+#     resources:
+#         mem='100M',
+#     run:
+#         fout = open(output.tsv, 'w')
+#         fout.write('\t'.join(['chrom', 'pid', 'pid_start']) + '\n')
+#         with open(input.faa) as faa:
+#             for line in faa:
+#                 line = line.strip()
+#                 if line.startswith('>'):
+#                     line = re.sub('^>', '', line)
+#                     assert ' location=' in line
+#                     pid = line.split('|')[0].strip()
+#                     loc = re.sub('.* location=', '', line)
+#                     loc = re.sub(' .*', '', loc)
+#                     ctg = ':'.join(loc[::-1].split(':')[1:])[::-1]
+#                     start = int(re.sub('-.*', '', re.sub('.*:', '', loc)))
+#                     fout.write('\t'.join([ctg, pid, str(start)]) + '\n')
+#         fout.close()
+# 
+# 
+# rule miniprot:
+#     input:
+#         faa='{genome}/ref/{genome}_AnnotatedProteins.fasta',
+#         fa='Pchabaudichabaudi/ref/Pchabaudichabaudi.fasta',
+#     output:
+#         paf='Pchabaudichabaudi/miniprot/{genome}_proteins.paf',
+#     resources:
+#         mem='30G',
+#     shell:
+#         r"""
+#         echo '#qname qlen qstart qend strand sname slen sstart send nmatch aln_len mapq t1 t2 t3 t4 t5 t6 t7 t8 t9' | tr ' ' '\t' > {output.paf}
+#         miniprot {input.fa} {input.faa} >> {output.paf}
+#         """
+# 
+# 
+# rule miniprot_paf_genomic_coords:
+#     input:
+#         paf='Pchabaudichabaudi/miniprot/{genome}_proteins.paf',
+#         tsv='{genome}/ref/{genome}.proteinLocation.tsv',
+#         fai='{genome}/ref/{genome}.fasta.fai',
+#     output:
+#         paf='miniprot/{genome}_proteins_vs_Pchabaudichabaudi_genome.paf',
+#     run:
+#         paf = pandas.read_csv(input.paf, sep='\t')
+#         tsv = pandas.read_csv(input.tsv, sep='\t')
+#         fai = pandas.read_csv(input.fai, sep='\t', header=None, usecols=[0, 1], names=['chrom', 'chrom_length'])
+#         
+#         gpaf = pandas.merge(paf, tsv, left_on='#qname', right_on='pid') 
+#         gpaf.drop(['#qname'], axis=1, inplace=True) 
+#         chrom = gpaf.pop('chrom')
+#         gpaf.insert(0, chrom.name, chrom)
+#         gpaf = pandas.merge(gpaf, fai, on='chrom')
+#         gpaf['qlen'] = gpaf['chrom_length']
+#         gpaf.drop(['chrom_length'], axis=1, inplace=True) 
+#         qstart = []
+#         qend = []
+#         for idx,row in gpaf.iterrows():
+#             if row['strand'] == '+':
+#                 qstart.append(((row['qstart'] * 3) + row['pid_start']) - 1)
+#                 qend.append(((row['qend'] * 3) + row['pid_start']) - 1)
+#             elif row['strand'] == '-':
+#                 qstart.append(((row['qstart'] * 3) + row['pid_start']) + 2)
+#                 qend.append(((row['qend'] * 3) + row['pid_start']) + 2)
+#             else:
+#                 raise Exception()
+#         gpaf['qstart'] = qstart
+#         gpaf['qend'] = qend
+# 
+#         gpaf.drop(['pid_start'], axis=1, inplace=True) 
+#         gpaf['pid'] = 'pid:Z:' + gpaf['pid']
+#         gpaf.to_csv(output.paf, sep='\t', header=False, index=False)
+# 
+# 
