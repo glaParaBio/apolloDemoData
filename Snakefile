@@ -31,8 +31,7 @@ rule zip_demodata:
         expand('{genome}/bigwig/{library_id}.bw', zip, genome=ss.genome, library_id=ss.library_id),
         expand('{genome}/ref/{genome}.fasta', genome=ss.genome),
         expand('{genome}/ref/{genome}.fasta.fai', genome=ss.genome),
-        expand('{genome}/ref/{genome}.gff.gz', genome=ss.genome),
-        expand('{genome}/ref/{genome}.gff.gz.tbi', genome=ss.genome),
+        expand('{genome}/ref/{genome}.gff', genome=ss.genome),
         'crunch/blast.paf',
     output:
         zip='apolloDemoData.zip',
@@ -57,8 +56,7 @@ rule zip_fulldemodata:
         expand('{genome}/bigwig/{library_id}.bw', zip, genome=ss.genome, library_id=ss.library_id),
         expand('{genome}/ref/{genome}.fasta', genome=ss.genome),
         expand('{genome}/ref/{genome}.fasta.fai', genome=ss.genome),
-        expand('{genome}/ref/{genome}.gff.gz', genome=ss.genome),
-        expand('{genome}/ref/{genome}.gff.gz.tbi', genome=ss.genome),
+        expand('{genome}/ref/{genome}.gff', genome=ss.genome),
         'crunch/blast.paf',
         'crunch/blast.out.gz',
     output:
@@ -94,27 +92,14 @@ rule download_genome:
 
 rule download_gff:
     output:
-        gff='{genome}/ref/{genome}.gff.gz',
+        gff='{genome}/ref/{genome}.gff',
     params:
         url=lambda wc: genomes[genomes.genome == wc.genome].gff.iloc[0],
     resources:
         mem='100M',
     shell:
         r"""
-        curl -s -L {params.url} \
-        | sortBed -header \
-        | bgzip > {output.gff}
-        """
-
-
-rule index_gff:
-    input:
-        gff='{genome}/ref/{genome}.gff.gz',
-    output:
-        tbi='{genome}/ref/{genome}.gff.gz.tbi',
-    shell:
-        r"""
-        tabix -p gff {input.gff}
+        curl -s -L {params.url} > {output.gff}
         """
 
 

@@ -59,7 +59,7 @@ Once done, upload `apolloDemoData.zip` as a new release, edit tag and notes as
 appropriate.
 
 ```
-gh release create v0.3.0 ~/sharedscratch/projects/apolloDemoData/apolloDemoData.zip --notes 'Apollo demo data'
+gh release create v0.4.0 ~/sharedscratch/projects/apolloDemoData/apolloDemoData.zip --notes 'Apollo demo data'
 ```
 
 # Local installation of Jbrowse with demo data
