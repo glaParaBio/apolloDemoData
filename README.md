@@ -59,6 +59,9 @@ Once done, upload `apolloDemoData.zip` as a new release, edit tag and notes as
 appropriate.
 
 ```
+git add ./
+git commit ...
+git push
 gh release create v0.4.0 ~/sharedscratch/projects/apolloDemoData/apolloDemoData.zip --notes 'Apollo demo data'
 ```
 
