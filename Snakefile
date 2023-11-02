@@ -14,6 +14,8 @@ assert len(ss.library_id) == len(set(ss.library_id))
 wildcard_constraints:
     library_id='|'.join([re.escape(x) for x in ss.library_id]),
     genome='|'.join([re.escape(x) for x in ss.genome]),
+    subject='|'.join([re.escape(x) for x in ss.genome]),
+    query='|'.join([re.escape(x) for x in ss.genome]),
     r='|'.join([re.escape(x) for x in ['1', '2']]),
 
 localrules: all, download_fastq, download_gff
@@ -32,7 +34,7 @@ rule zip_demodata:
         expand('{genome}/ref/{genome}.fasta', genome=ss.genome),
         expand('{genome}/ref/{genome}.fasta.fai', genome=ss.genome),
         expand('{genome}/ref/{genome}.gff', genome=ss.genome),
-        'crunch/blast.paf',
+        'tblastx/Pchabaudichabaudi_vs_Pfalciparum3D7.paf',
     output:
         zip='apolloDemoData.zip',
     params:
@@ -57,8 +59,8 @@ rule zip_fulldemodata:
         expand('{genome}/ref/{genome}.fasta', genome=ss.genome),
         expand('{genome}/ref/{genome}.fasta.fai', genome=ss.genome),
         expand('{genome}/ref/{genome}.gff', genome=ss.genome),
-        'crunch/blast.paf',
-        'crunch/blast.out.gz',
+        'tblastx/Pchabaudichabaudi_vs_Pfalciparum3D7.paf',
+        'tblastx/Pchabaudichabaudi_vs_Pfalciparum3D7.out.gz',
     output:
         zip='apolloDemoDataFull.zip',
     params:
@@ -216,11 +218,9 @@ rule bamToBigwig:
 
 rule makeblastdb:
     input:
-        fa='Pfalciparum3D7/ref/Pfalciparum3D7.fasta',
+        fa='{subject}/ref/{subject}.fasta',
     output:
-        db='Pfalciparum3D7/ref/Pfalciparum3D7.fasta.nin',
-    #params:
-    #    ctg=lambda wc: genomes[genomes.genome== 'Pfalciparum3D7'].demo_contigs.iloc[0].replace(',', ' '),
+        db='{subject}/ref/{subject}.fasta.nin',
     shell:
         r"""
         makeblastdb -in {input.fa} -dbtype nucl
@@ -229,19 +229,17 @@ rule makeblastdb:
 
 checkpoint split_query:
     input:
-        fai='Pchabaudichabaudi/ref/Pchabaudichabaudi.fasta.fai',
-        fa='Pchabaudichabaudi/ref/Pchabaudichabaudi.fasta',
+        fai='{query}/ref/{query}.fasta.fai',
+        fa='{query}/ref/{query}.fasta',
     output:
-        outdir=temp(directory('split')),
-    #params:
-    #    ctg=lambda wc: genomes[genomes.genome== 'Pchabaudichabaudi'].demo_contigs.iloc[0].replace(',', '|'),
+        outdir=temp(directory('split/{query}')),
     shell:
         r"""
         mkdir {output.outdir}
         bedtools makewindows -g {input.fai} -w 20000 | awk '{{print $1 ":" $2+1 "-" $3}}' > {output.outdir}/windows.bed
         while read -r line
         do
-           samtools faidx {input.fa} $line > split/${{line}}.fasta
+           samtools faidx {input.fa} $line > {output.outdir}/${{line}}.fasta
         done < {output.outdir}/windows.bed
         rm {output.outdir}/windows.bed
         """
@@ -249,11 +247,11 @@ checkpoint split_query:
 
 rule tblastx:
     input:
-        query='split/{window}.fasta',
-        db='Pfalciparum3D7/ref/Pfalciparum3D7.fasta.nin',
-        fa='Pfalciparum3D7/ref/Pfalciparum3D7.fasta',
+        query='split/{query}/{window}.fasta',
+        db='{subject}/ref/{subject}.fasta.nin',
+        fa='{subject}/ref/{subject}.fasta',
     output:
-        out='blast/{window}.out',
+        out='blast/{query}/{subject}/{window}.out',
     params:
         fmt=BLAST_FMT,
     resources:
@@ -270,16 +268,16 @@ rule tblastx:
 
 
 def aggregate_blast(wc):
-    checkpoint_output = checkpoints.split_query.get().output.outdir
+    checkpoint_output = checkpoints.split_query.get(query=wc.query).output.outdir
     outfiles = [os.path.basename(x) for x in glob.glob(os.path.join(checkpoint_output, '*.fasta'))]
     windows = [re.sub('\.fasta$', '', x) for x in outfiles]
-    return expand('blast/{window}.out', window=windows)
+    return expand('blast/{query}/{subject}/{window}.out', window=windows, query=wc.query, subject=wc.subject)
 
 rule cat_blast:
     input:
         out=aggregate_blast,
     output:
-        out='crunch/blast.out.gz',
+        out='tblastx/{query}_vs_{subject}.out.gz',
     resources:
         mem='2500M',
     run:
@@ -312,10 +310,10 @@ rule cat_blast:
 
 rule blast_to_paf:
     input:
-        out='crunch/blast.out.gz',
+        out='tblastx/{query}_vs_{subject}.out.gz',
         fai=expand('{genome}/ref/{genome}.fasta.fai', genome=ss.genome),
     output:
-        paf='crunch/blast.paf',
+        paf='tblastx/{query}_vs_{subject}.paf',
     resources:
         mem='8G',
     run:
