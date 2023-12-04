@@ -24,6 +24,7 @@ rule all:
     input:
         'apolloDemoData.zip',
         'apolloDemoDataFull.zip',
+        expand('{genome}/bigwig/{library_id}.bw', zip, genome=ss.genome, library_id=ss.library_id),
 
 
 rule zip_demodata:
@@ -203,15 +204,15 @@ rule index_cram:
 
 rule bamToBigwig:
     input:
-        bam='{genome}/hisat2/{library_id}.bam',
+        bam='{genome}/hisat2/{library_id}.cram',
     output:
         bw='{genome}/bigwig/{library_id}.bw',
     shell:
         r"""
         bamCoverage -b {input.bam} -o {output} \
-            --binSize 50 \
-            --minMappingQuality 5 \
-            --normalizeUsing BPM \
+            --binSize 1 \
+            --minMappingQuality 0 \
+            --normalizeUsing None \
             --numberOfProcessors 4
         """
 
