@@ -70,7 +70,7 @@ gh release create v0.4.0 ~/sharedscratch/projects/apolloDemoData/apolloDemoData.
 ## Install jbrowse
 
 Mostly following the jbrowse2 [quick
-start](https://jbrowse.org/jb2/docs/quickstart_web/), using node v18.17.1 on Ubuntu 20 at
+start](https://jbrowse.org/jb2/docs/quickstart_web/), using node v18 on Ubuntu 22 at
 time of this writing:
 
 ```
@@ -90,17 +90,17 @@ unzip -o apolloDemoData.zip
 rm apolloDemoData.zip
 
 jbrowse add-assembly apolloDemoData/Pfalciparum3D7/ref/Pfalciparum3D7.fasta --force --load copy --out demoData
-jbrowse add-track apolloDemoData/Pfalciparum3D7/ref/Pfalciparum3D7.gff.gz --force --load copy --out demoData -a Pfalciparum3D7
+jbrowse add-track apolloDemoData/Pfalciparum3D7/ref/Pfalciparum3D7.gff --force --load copy --out demoData -a Pfalciparum3D7
 jbrowse add-track apolloDemoData/Pfalciparum3D7/hisat2/T0_rep1.cram --force --load copy --out demoData -a Pfalciparum3D7 --trackId T0_rep1.cram
 jbrowse add-track apolloDemoData/Pfalciparum3D7/bigwig/T0_rep1.bw --force --load copy --out demoData -a Pfalciparum3D7 --trackId T0_rep1.bw
 
 jbrowse add-assembly apolloDemoData/Pchabaudichabaudi/ref/Pchabaudichabaudi.fasta --force --load copy --out demoData
-jbrowse add-track apolloDemoData/Pchabaudichabaudi/ref/Pchabaudichabaudi.gff.gz --force --load copy --out demoData -a Pchabaudichabaudi
+jbrowse add-track apolloDemoData/Pchabaudichabaudi/ref/Pchabaudichabaudi.gff --force --load copy --out demoData -a Pchabaudichabaudi
 jbrowse add-track apolloDemoData/Pchabaudichabaudi/hisat2/Matched_D1T0830_Rep2.cram --force --load copy --out demoData -a Pchabaudichabaudi --trackId Matched_D1T0830_Rep2.cram
 jbrowse add-track apolloDemoData/Pchabaudichabaudi/bigwig/Matched_D1T0830_Rep2.bw --force --load copy --out demoData -a Pchabaudichabaudi --trackId Matched_D1T0830_Rep2.bw
 
 ## Synteny file
-jbrowse add-track apolloDemoData/crunch/blast.paf --assemblyNames Pchabaudichabaudi,Pfalciparum3D7 --force --load copy --out demoData
+jbrowse add-track apolloDemoData/tblastx/Pchabaudichabaudi_vs_Pfalciparum3D7.paf --assemblyNames Pchabaudichabaudi,Pfalciparum3D7 --force --load copy --out demoData
 
 jbrowse text-index --force --out demoData
 ```
