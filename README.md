@@ -50,7 +50,7 @@ mamba activate apolloDemoData
 snakemake -p --dry-run -j 500 -C ss=$PWD/sample_sheet.tsv genomes=$PWD/genomes.tsv \
     --default-resources "mem='1G'" "cpus_per_task='4'" \
     --latency-wait 60 \
-    --cluster 'sbatch --cpus-per-task={resources.cpus_per_task} --mem={resources.mem} --parsable -o slurm/{rule}.{jobid}.out -e slurm/{rule}.{jobid}.err' \
+    --cluster 'sbatch -A project0014 --cpus-per-task={resources.cpus_per_task} --mem={resources.mem} --parsable -o slurm/{rule}.{jobid}.out -e slurm/{rule}.{jobid}.err' \
     --cluster-cancel scancel \
     --directory ~/sharedscratch/projects/apolloDemoData
 ```
