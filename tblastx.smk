@@ -3,22 +3,43 @@ import glob
 
 os.makedirs('slurm', exist_ok=True)
 
-ss = pandas.DataFrame({'genome': ['schistosoma_haematobium.TD2_PRJEB44434.WBPS19.CHR_3', 'schistosoma_mansoni.PRJEA36577.WBPS19.SM_V10_3']})
+chroms = ['1', '2', '3', '4', '5', '6', '7', 'Z', 'MITO']
+
+QUERY=config['query'] 
+SUBJECT=config['subject'] 
 
 BLAST_FMT = 'qaccver saccver pident length mismatch gapopen qstart qend sstart send evalue bitscore nident positive slen sstrand'
+
+wildcard_constraints:
+    chrom='|'.join([re.escape(x) for x in chroms]),
 
 localrules: all
 
 rule all:
     input:
-        paf='tblastx/schistosoma_haematobium.TD2_PRJEB44434.WBPS19.sm.CHR_3_vs_schistosoma_mansoni.PRJEA36577.WBPS19.sm.SM_V10_3.paf',
+        expand('tblastx/{chrom}/{QUERY}_vs_{SUBJECT}.paf', QUERY=QUERY, SUBJECT=SUBJECT, chrom=chroms),
 
+rule getChrom:
+    input:
+        genome='{genome}/ref/{genome}.genomic_masked.fa',
+        fai='{genome}/ref/{genome}.genomic_masked.fa.fai',
+    output:
+        chrom=temp('{genome}/ref/{chrom}.fa'),
+        fai=temp('{genome}/ref/{chrom}.fa.fai'),
+    shell:
+        r"""
+        chrom=`grep -P '_{wildcards.chrom}\t' {input.fai} | cut -f 1`
+        samtools faidx {input.genome} $chrom > {output.chrom}
+        samtools faidx {output.chrom}
+        """
 
 rule makeblastdb:
     input:
-        fa='{subject}/ref/{subject}.fasta',
+        fa='{subject}/ref/{subject}.genomic_masked.fa',
+        # fa='{subject}/ref/{chrom}.fa',
     output:
-        db='{subject}/ref/{subject}.fasta.nin',
+        db='{subject}/ref/{subject}.genomic_masked.fa.nin',
+        # db='{subject}/ref/{chrom}.fa.nin',
     shell:
         r"""
         makeblastdb -in {input.fa} -dbtype nucl
@@ -27,17 +48,17 @@ rule makeblastdb:
 
 checkpoint split_query:
     input:
-        fai='{query}/ref/{query}.fasta.fai',
-        fa='{query}/ref/{query}.fasta',
+        fai='{query}/ref/{chrom}.fa.fai',
+        fa='{query}/ref/{chrom}.fa',
     output:
-        outdir=temp(directory('split/{query}')),
+        outdir=temp(directory('split/{query}/{chrom}')),
     shell:
         r"""
         mkdir {output.outdir}
         bedtools makewindows -g {input.fai} -w 20000 | awk '{{print $1 ":" $2+1 "-" $3}}' > {output.outdir}/windows.bed
         while read -r line
         do
-           samtools faidx {input.fa} $line > {output.outdir}/${{line}}.fasta
+           samtools faidx {input.fa} $line > {output.outdir}/${{line}}.fa
         done < {output.outdir}/windows.bed
         rm {output.outdir}/windows.bed
         """
@@ -45,11 +66,13 @@ checkpoint split_query:
 
 rule tblastx:
     input:
-        query='split/{query}/{window}.fasta',
-        db='{subject}/ref/{subject}.fasta.nin',
-        fa='{subject}/ref/{subject}.fasta',
+        query='split/{query}/{chrom}/{window}.fa',
+        db='{subject}/ref/{subject}.genomic_masked.fa.nin',
+        fa='{subject}/ref/{subject}.genomic_masked.fa',
+        # db='{subject}/ref/{chrom}.fa.nin',
+        # fa='{subject}/ref/{chrom}.fa',
     output:
-        out='blast/{query}/{subject}/{window}.out',
+        out='blast/{chrom}/{query}/{subject}/{window}.out',
     params:
         fmt=BLAST_FMT,
     resources:
@@ -67,16 +90,16 @@ rule tblastx:
 
 
 def aggregate_blast(wc):
-    checkpoint_output = checkpoints.split_query.get(query=wc.query).output.outdir
-    outfiles = [os.path.basename(x) for x in glob.glob(os.path.join(checkpoint_output, '*.fasta'))]
-    windows = [re.sub('\.fasta$', '', x) for x in outfiles]
-    return expand('blast/{query}/{subject}/{window}.out', window=windows, query=wc.query, subject=wc.subject)
+    checkpoint_output = checkpoints.split_query.get(query=wc.query, chrom=wc.chrom).output.outdir
+    outfiles = [os.path.basename(x) for x in glob.glob(os.path.join(checkpoint_output, '*.fa'))]
+    windows = [re.sub('\.fa$', '', x) for x in outfiles]
+    return expand('blast/{chrom}/{query}/{subject}/{window}.out', chrom=wc.chrom, window=windows, query=wc.query, subject=wc.subject)
 
 rule cat_blast:
     input:
         out=aggregate_blast,
     output:
-        out='tblastx/{query}_vs_{subject}.out.gz',
+        out='tblastx/{chrom}/{query}_vs_{subject}.out.gz',
     resources:
         mem='2500M',
     run:
@@ -109,15 +132,16 @@ rule cat_blast:
 
 rule blast_to_paf:
     input:
-        out='tblastx/{query}_vs_{subject}.out.gz',
-        fai=expand('{genome}/ref/{genome}.fasta.fai', genome=ss.genome),
+        out='tblastx/{chrom}/{query}_vs_{subject}.out.gz',
+        fai_query='{query}/ref/{chrom}.fa.fai',
+        fai_subject='{subject}/ref/{subject}.genomic_masked.fa.fai',
     output:
-        paf='tblastx/{query}_vs_{subject}.paf',
+        paf='tblastx/{chrom}/{query}_vs_{subject}.paf',
     resources:
         mem='8G',
     run:
         fai = {}
-        for fn in input.fai:
+        for fn in [input.fai_query, input.fai_subject]:
             with open(fn) as fin:
                 for line in fin:
                     line = line.strip().split('\t')
