@@ -4,6 +4,7 @@
     * [Notes on output files](#notes-on-output-files)
 * [Setup & Run](#setup--run)
 * [*Schistosoma* synteny tracks](#schistosoma-synteny-tracks)
+* [*Trichuris* synteny tracks](#trichuris-synteny-tracks)
 * [Local installation of Jbrowse with demo data](#local-installation-of-jbrowse-with-demo-data)
     * [Install jbrowse](#install-jbrowse)
     * [Download and add demo data](#download-and-add-demo-data)
@@ -79,6 +80,41 @@ snakemake -p --dry-run -j 100 \
     --directory ~/sharedscratch/projects/apolloDemoDataSchistosoma \
     --config query=schistosoma_haematobium.TD2_PRJEB44434.WBPS19 \
              subject=schistosoma_mansoni.PRJEA36577.WBPS19 \
+             chroms=['1', '2', '3', '4', '5', '6', '7', 'Z', 'MITO'] \
+    --keep-going
+```
+
+# *Trichuris* synteny tracks
+
+```
+for genome in trichuris_muris.PRJEB126.WBPS19 trichuris_trichiura.PRJEB535.WBPS19
+do
+    species=`echo ${genome} | sed 's/\..*//'`
+    prj=`echo ${genome} | sed 's/.*PRJ/PRJ/ ; s/\..*//'`
+    mkdir -p ${genome}/ref
+    curl https://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS19/species/${species}/${prj}/${genome}.genomic_masked.fa.gz \
+    | gunzip > ${genome}/ref/${genome}.genomic_masked.fa
+    samtools faidx
+
+    ## Also prepare gff3 files. Make them smaller and remove non-CDS records with the same ID
+
+    curl https://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS19/species/${species}/${prj}/${genome}.annotations.gff3.gz \
+    | zcat \
+    | grep -P '\tCDS\t|\texon\t|\tgene\t|\tmRNA\t|\tprotein_coding_primary_transcript\t|\trRNA\t|\tsnRNA\t|\ttRNA\t|\tnontranslating_CDS\t|^##' > ${genome}.annotations.gff3
+done
+```
+
+```
+snakemake -p -j 20 \
+    -s tblastx.smk \
+    --default-resources "mem='1G'" "cpus_per_task='1'" \
+    --latency-wait 60 \
+    --cluster 'sbatch -A project0014 --cpus-per-task={resources.cpus_per_task} --mem={resources.mem} --parsable -o slurm/{rule}.{jobid}.out -e slurm/{rule}.{jobid}.err' \
+    --cluster-cancel scancel \
+    --directory ~/sharedscratch/projects/apolloDemoDataSchistosoma \
+    --config query=trichuris_muris.PRJEB126.WBPS19 \
+             subject=trichuris_trichiura.PRJEB535.WBPS19 \
+             chroms=['TMUE_LG2'] \
     --keep-going
 ```
 

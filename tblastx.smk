@@ -3,7 +3,9 @@ import glob
 
 os.makedirs('slurm', exist_ok=True)
 
-chroms = ['1', '2', '3', '4', '5', '6', '7', 'Z', 'MITO']
+CHROMS=config['chroms']
+
+print(CHROMS)
 
 QUERY=config['query'] 
 SUBJECT=config['subject'] 
@@ -11,13 +13,23 @@ SUBJECT=config['subject']
 BLAST_FMT = 'qaccver saccver pident length mismatch gapopen qstart qend sstart send evalue bitscore nident positive slen sstrand'
 
 wildcard_constraints:
-    chrom='|'.join([re.escape(x) for x in chroms]),
+    chrom='|'.join([re.escape(x) for x in CHROMS]),
 
 localrules: all
 
 rule all:
     input:
-        expand('tblastx/{chrom}/{QUERY}_vs_{SUBJECT}.paf', QUERY=QUERY, SUBJECT=SUBJECT, chrom=chroms),
+        expand('tblastx/{chrom}/{QUERY}_vs_{SUBJECT}.paf', QUERY=QUERY, SUBJECT=SUBJECT, chrom=CHROMS),
+
+rule faidx:
+    input:
+        genome='{genome}/ref/{genome}.genomic_masked.fa',
+    output:
+        fai='{genome}/ref/{genome}.genomic_masked.fa.fai',
+    shell:
+        r"""
+        samtools faidx {input}
+        """
 
 rule getChrom:
     input:
@@ -28,7 +40,7 @@ rule getChrom:
         fai=temp('{genome}/ref/{chrom}.fa.fai'),
     shell:
         r"""
-        chrom=`grep -P '_{wildcards.chrom}\t' {input.fai} | cut -f 1`
+        chrom=`grep -P '^{wildcards.chrom}\t' {input.fai} | cut -f 1`
         samtools faidx {input.genome} $chrom > {output.chrom}
         samtools faidx {output.chrom}
         """
