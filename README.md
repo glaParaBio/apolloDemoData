@@ -5,6 +5,7 @@
 * [Setup & Run](#setup--run)
 * [*Schistosoma* synteny tracks](#schistosoma-synteny-tracks)
 * [*Trichuris* synteny tracks](#trichuris-synteny-tracks)
+* [Loading assemblies, synteny, and evidence to staging server](#loading-assemblies-synteny-and-evidence-to-staging-server)
 * [Local installation of Jbrowse with demo data](#local-installation-of-jbrowse-with-demo-data)
     * [Install jbrowse](#install-jbrowse)
     * [Download and add demo data](#download-and-add-demo-data)
@@ -86,21 +87,29 @@ snakemake -p --dry-run -j 100 \
 
 # *Trichuris* synteny tracks
 
+> [!NOTE]
+> Use `genomic_masked` for blast and `soft_masked` for Apollo.
+
 ```
-for genome in trichuris_muris.PRJEB126.WBPS19 trichuris_trichiura.PRJEB535.WBPS19
+for genome in trichuris_suis.PRJNA179528.WBPS19 trichuris_muris.PRJEB126.WBPS19 trichuris_trichiura.PRJEB535.WBPS19
 do
     species=`echo ${genome} | sed 's/\..*//'`
     prj=`echo ${genome} | sed 's/.*PRJ/PRJ/ ; s/\..*//'`
     mkdir -p ${genome}/ref
-    curl https://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS19/species/${species}/${prj}/${genome}.genomic_masked.fa.gz \
-    | gunzip > ${genome}/ref/${genome}.genomic_masked.fa
-    samtools faidx
+    #curl https://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS19/species/${species}/${prj}/${genome}.genomic_masked.fa.gz \
+    #| gunzip > ${genome}/ref/${genome}.genomic_masked.fa
+    #samtools faidx ${genome}/ref/${genome}.genomic_masked.fa
+
+    curl https://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS19/species/${species}/${prj}/${genome}.genomic_softmasked.fa.gz \
+    | gunzip \
+    | bgzip > ${genome}/ref/${genome}.genomic_softmasked.fa.gz
+    samtools faidx ${genome}/ref/${genome}.genomic_softmasked.fa.gz
 
     ## Also prepare gff3 files. Make them smaller and remove non-CDS records with the same ID
 
     curl https://ftp.ebi.ac.uk/pub/databases/wormbase/parasite/releases/WBPS19/species/${species}/${prj}/${genome}.annotations.gff3.gz \
     | zcat \
-    | grep -P '\tCDS\t|\texon\t|\tgene\t|\tmRNA\t|\tprotein_coding_primary_transcript\t|\trRNA\t|\tsnRNA\t|\ttRNA\t|\tnontranslating_CDS\t|^##' > ${genome}.annotations.gff3
+    | grep -P '\tCDS\t|\texon\t|\tgene\t|\tmRNA\t|\tprotein_coding_primary_transcript\t|\trRNA\t|\tsnRNA\t|\ttRNA\t|\tnontranslating_CDS\t|^##' > ${genome}/ref/${genome}.annotations.gff3
 done
 ```
 
@@ -116,6 +125,108 @@ snakemake -p -j 20 \
              subject=trichuris_trichiura.PRJEB535.WBPS19 \
              chroms=['TMUE_LG2'] \
     --keep-going
+```
+
+```
+snakemake -p -j 20 \
+    -s tblastx.smk \
+    --default-resources "mem='1G'" "cpus_per_task='1'" \
+    --latency-wait 60 \
+    --cluster 'sbatch -A project0014 --cpus-per-task={resources.cpus_per_task} --mem={resources.mem} --parsable -o slurm/{rule}.{jobid}.out -e slurm/{rule}.{jobid}.err' \
+    --cluster-cancel scancel \
+    --directory ~/sharedscratch/projects/apolloDemoDataSchistosoma \
+    --config query=trichuris_trichiura.PRJEB535.WBPS19 \
+             subject=trichuris_suis.PRJNA179528.WBPS19 \
+             chroms=['TTRE_chr2'] \
+    --keep-going
+```
+
+```
+snakemake -p -j 80 \
+    -s tblastx.smk \
+    --default-resources "mem='1G'" "cpus_per_task='1'" \
+    --latency-wait 60 \
+    --cluster 'sbatch -A project0014 --cpus-per-task={resources.cpus_per_task} --mem={resources.mem} --parsable -o slurm/{rule}.{jobid}.out -e slurm/{rule}.{jobid}.err' \
+    --cluster-cancel scancel \
+    --directory ~/sharedscratch/projects/apolloDemoDataSchistosoma \
+    --config query=trichuris_muris.PRJEB126.WBPS19 \
+             subject=trichuris_suis.PRJNA179528.WBPS19 \
+             chroms=['TMUE_LG2'] \
+    --keep-going
+```
+
+# Loading assemblies, synteny, and evidence to staging server
+
+```
+cd ~/dario/manuscript
+apollo login --profile demo
+
+for fa in trichuris_muris.PRJEB126.WBPS19/ref/trichuris_muris.PRJEB126.WBPS19.genomic_softmasked.fa.gz \
+    trichuris_suis.PRJNA179528.WBPS19/ref/trichuris_suis.PRJNA179528.WBPS19.genomic_softmasked.fa.gz \
+    trichuris_trichiura.PRJEB535.WBPS19/ref/trichuris_trichiura.PRJEB535.WBPS19.genomic_softmasked.fa.gz
+do
+    name=${fa/.*/}
+    apollo assembly add-from-fasta --profile demo --force ${fa} --fai ${fa}.fai --gzi ${fa}.gzi --assembly ${name}
+done
+
+apollo jbrowse get-config --profile demo > config.json
+
+for paf in trichuris_muris.PRJEB126.WBPS19_vs_trichuris_suis.PRJNA179528.WBPS19.paf \
+    trichuris_muris.PRJEB126.WBPS19_vs_trichuris_trichiura.PRJEB535.WBPS19.paf \
+    trichuris_trichiura.PRJEB535.WBPS19_vs_trichuris_suis.PRJNA179528.WBPS19.paf
+do
+    cp ${paf} /home/ec2-user/deployment/data/
+    paf=`basename $paf`
+    name1=`echo $paf | sed 's/\..*//'`
+    name2=`echo $paf | sed 's/.*_vs_//; s/\..*//'`
+
+    ID1=$(
+        apollo assembly get --profile demo |
+        jq --raw-output ".[] | select(.name==\"$name1\")._id"
+    )
+    ID2=$(
+        apollo assembly get --profile demo |
+        jq --raw-output ".[] | select(.name==\"$name2\")._id"
+    )
+
+    jbrowse add-track \
+        /data/${paf} \
+      --load inPlace \
+      --name "${name1} vs ${name2} TBLASTX" \
+      --protocol uri \
+      --assemblyNames "${ID1}","${ID2}" \
+      --out config.json \
+      --force
+done
+
+ID=$(
+    apollo assembly get --profile demo |
+    jq --raw-output ".[] | select(.name==\"trichuris_trichiura\")._id"
+    )
+
+cp trichuris_trichiura.PRJEB535.WBPS19/TTRE_all_isoseq.bam* /home/ec2-user/deployment/data/
+
+jbrowse add-track \
+  /data/TTRE_all_isoseq.bam \
+  --load inPlace \
+  --name "IsoSeq" \
+  --protocol uri \
+  --assemblyNames "${ID}" \
+  --out config.json \
+  --force
+
+apollo jbrowse set-config --profile demo config.json
+rm config.json
+```
+
+```
+awk '$1 == "TMUE_LG2"' trichuris_muris.PRJEB126.WBPS19/ref/trichuris_muris.PRJEB126.WBPS19.annotations.gff3 > trichuris_muris.PRJEB126.WBPS19/ref/trichuris_muris.LG2.gff3
+awk '$1 == "TTRE_chr2"' trichuris_trichiura.PRJEB535.WBPS19/ref/trichuris_trichiura.PRJEB535.WBPS19.annotations.gff3 > trichuris_trichiura.PRJEB535.WBPS19/ref/trichuris_trichiura.chr2.gff3 
+awk '$1 == "T_suis-1.0_Cont24"' trichuris_suis.PRJNA179528.WBPS19/ref/trichuris_suis.PRJNA179528.WBPS19.annotations.gff3 > trichuris_suis.PRJNA179528.WBPS19/ref/trichuris_suis.Cont24.gff3
+
+apollo feature import --profile demo trichuris_suis.PRJNA179528.WBPS19/ref/trichuris_suis.Cont24.gff3 -a trichuris_suis -d
+apollo feature import --profile demo trichuris_muris.PRJEB126.WBPS19/ref/trichuris_muris.LG2.gff3 -a trichuris_muris -d &
+apollo feature import --profile demo  trichuris_trichiura.PRJEB535.WBPS19/ref/trichuris_trichiura.chr2.gff3 -a trichuris_trichiura -d &
 ```
 
 # Local installation of Jbrowse with demo data

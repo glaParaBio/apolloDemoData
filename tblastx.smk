@@ -90,7 +90,7 @@ rule tblastx:
     resources:
         mem='4G',
         cpus_per_task=1,
-        time='08:00:00',
+        time='04:00:00',
     shell:
         r"""
         tblastx -query {input.query} \
