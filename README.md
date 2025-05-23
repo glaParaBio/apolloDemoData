@@ -221,10 +221,9 @@ rm config.json
 
 ```
 awk '$1 == "TMUE_LG2"' trichuris_muris.PRJEB126.WBPS19/ref/trichuris_muris.PRJEB126.WBPS19.annotations.gff3 > trichuris_muris.PRJEB126.WBPS19/ref/trichuris_muris.LG2.gff3
-awk '$1 == "TTRE_chr2"' trichuris_trichiura.PRJEB535.WBPS19/ref/trichuris_trichiura.PRJEB535.WBPS19.annotations.gff3 > trichuris_trichiura.PRJEB535.WBPS19/ref/trichuris_trichiura.chr2.gff3 
-awk '$1 == "T_suis-1.0_Cont24"' trichuris_suis.PRJNA179528.WBPS19/ref/trichuris_suis.PRJNA179528.WBPS19.annotations.gff3 > trichuris_suis.PRJNA179528.WBPS19/ref/trichuris_suis.Cont24.gff3
+awk '$1 == "TTRE_chr2"' trichuris_trichiura.PRJEB535.WBPS19/ref/trichuris_trichiura.PRJEB535.WBPS19.annotations.gff3 > trichuris_trichiura.PRJEB535.WBPS19/ref/trichuris_trichiura.chr2.gff3
 
-apollo feature import --profile demo trichuris_suis.PRJNA179528.WBPS19/ref/trichuris_suis.Cont24.gff3 -a trichuris_suis -d
+apollo feature import --profile demo trichuris_suis.PRJNA179528.WBPS19/ref/trichuris_suis.PRJNA179528.WBPS19.annotations.gff3 -a trichuris_suis -d
 apollo feature import --profile demo trichuris_muris.PRJEB126.WBPS19/ref/trichuris_muris.LG2.gff3 -a trichuris_muris -d &
 apollo feature import --profile demo  trichuris_trichiura.PRJEB535.WBPS19/ref/trichuris_trichiura.chr2.gff3 -a trichuris_trichiura -d &
 ```
